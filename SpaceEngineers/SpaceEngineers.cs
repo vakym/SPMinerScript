@@ -86,7 +86,7 @@ namespace SpaceEngineers
 
             private Vector3D SpecialNormalizeSpeedVector(Vector3D speedVector)
             {
-                return speedVector / Math.Sqrt(speedVector.Length()) + 2;
+                return speedVector / 3*speedVector.Length() + 2;
             }
             private void SendSingnalToGyro(float pitch, float roll, float yaw)
             {
