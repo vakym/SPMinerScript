@@ -26,6 +26,7 @@ namespace SpaceEngineers
         {
             var gyros = new List<IMyGyro>();
             var thrusters = new List<IMyThrust>();
+           
             GridTerminalSystem.GetBlocksOfType(gyros);
             GridTerminalSystem.GetBlocksOfType(thrusters);
             shipController = GridTerminalSystem.GetBlockWithName("Controller") as IMyShipController;
@@ -38,7 +39,8 @@ namespace SpaceEngineers
             planetG = shipController.GetNaturalGravity();
             planetGNorm = Vector3D.Normalize(planetG);
             speedVector = shipController.GetShipVelocities().LinearVelocity;
-            gridControl.MoveGrid(planetGNorm, speedVector);
+            gridControl.MoveGrid(planetG,planetGNorm, speedVector);
+            Echo(gridControl.T.ToString());
         }
 
         private class GridControl
@@ -47,6 +49,14 @@ namespace SpaceEngineers
             public List<IMyGyro> Gyroscopes { get; }
             public List<IMyThrust> Thrusters { get; }
             public IMyShipController ShipController { get; }
+            public float T;
+            public float Mass
+            {
+                get
+                {
+                    return ShipController.CalculateShipMass().TotalMass;
+                }
+            }
 
             public GridControl (List<IMyGyro> gyroscopes, List<IMyThrust> thrusters, IMyShipController shipController)
             {
@@ -65,36 +75,46 @@ namespace SpaceEngineers
                 }
             }
 
-            public void MoveGrid(Vector3D planetGravity, Vector3D speedVector)
+            public void MoveGrid(Vector3D planetGravity, Vector3D planetGravityNormal, Vector3D speedVector)
             {
                
-                var forward = Vector3D.Normalize(Vector3D.Reject(ShipController.WorldMatrix.Forward, planetGravity)) * ShipController.MoveIndicator.Z;
+                var forward = Vector3D.Normalize(Vector3D.Reject(ShipController.WorldMatrix.Forward, planetGravityNormal)) * ShipController.MoveIndicator.Z;
                 var rotation = Vector3D.Normalize(
                                                     Vector3D.Reject(
                                                                     ShipController.WorldMatrix.Left,
-                                                                    planetGravity)) 
+                                                                    planetGravityNormal)) 
                                                     * ShipController.RollIndicator;
                 var orientationVector = Vector3D.Normalize(
-                                                            planetGravity +
+                                                            planetGravityNormal +
                                                             SpecialNormalizeSpeedVector(speedVector) +
                                                             forward +
                                                             rotation);
-                SendSingnalToGyro((float)orientationVector.Dot(ShipController.WorldMatrix.Forward),
+                SetSingnalToGyro((float)orientationVector.Dot(ShipController.WorldMatrix.Forward),
                                  (float)orientationVector.Dot(ShipController.WorldMatrix.Left),
                                  ShipController.MoveIndicator.X);
+                T = (float)((planetGravity.Length()*Mass)/Vector3D.Dot(ShipController.WorldMatrix.Down,planetGravityNormal));
+                SetPowerToThrusters(T);
             }
 
             private Vector3D SpecialNormalizeSpeedVector(Vector3D speedVector)
             {
-                return speedVector / Math.Sqrt(speedVector.Length()) + 2;
+                return speedVector / 3*speedVector.Length() + 2;
             }
-            private void SendSingnalToGyro(float pitch, float roll, float yaw)
+            private void SetSingnalToGyro(float pitch, float roll, float yaw)
             {
                 foreach (var gyro in Gyroscopes)
                 {
                     gyro.Pitch = -pitch;
                     gyro.Roll = roll;
                     gyro.Yaw = yaw;
+                }
+            }
+            private void SetPowerToThrusters(float power)
+            {
+                var powerPerThruster = power / Thrusters.Count;
+                foreach (var thruster in Thrusters)
+                {
+                    thruster.ThrustOverride = powerPerThruster;
                 }
             }
         }
